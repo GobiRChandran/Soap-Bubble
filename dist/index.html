@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Soap Bubble</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600..900;1,9..144,400..700&family=Nunito+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&display=swap"
+    rel="stylesheet" />
+  <script type="module" crossorigin src="/assets/index-C-3MzwR8.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-o9GoVAib.css">
+</head>
+
+<body>
+  <div id="app-root">
+    <main id="game-stage">
+
+      <!-- 1. PURE LOTTIE STAGE -->
+      <section id="gameplay-screen" class="stage-layer" aria-label="Soap Bubble Stage">
+        <div id="lottie-container"></div>
+      </section>
+
+      <!-- 2. ENTRY SCREEN OVERLAY (Unified Title Component + START BLOWING) -->
+      <section id="entry-screen" class="stage-layer active" aria-label="Welcome Screen">
+
+        <div class="entry-content">
+          <!-- 1. The component uploaded: Soap Bubble + Wreath + USE MICROPHONE Ribbon (Unified, not split) -->
+          <div class="entry-title-container">
+            <img src="/assets/current/screens/title-soap-bubble-with-ribbon.png" alt="Soap Bubble - Use Microphone" class="entry-title-img" />
+            <!-- Hotspot over the USE MICROPHONE ribbon on the component -->
+            <button id="btn-use-mic" class="title-ribbon-hotspot" type="button" aria-label="Use Microphone"></button>
+          </div>
+
+          <!-- 2. Primary button as separate: ONLY these two elements on entry -->
+          <div class="entry-actions">
+            <button id="btn-start-blowing" class="cta-pill-btn" type="button" aria-label="Start Blowing Bubbles">
+              <span class="cta-btn-label">START BLOWING</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. GAMEPLAY HUD OVERLAY -->
+      <aside id="gameplay-hud" class="stage-layer" aria-label="Game HUD">
+        <!-- Top Attempt Badge (1/3, 2/3, 3/3) and Instruction Hint -->
+        <div class="hud-top-bar">
+          <div id="attempt-badge" class="attempt-badge" aria-label="Attempt 1 of 3">
+            <img src="/assets/current/decorative/media_1788638647246.png" alt="" class="badge-bg" aria-hidden="true" />
+            <span id="attempt-counter-text" class="attempt-text">1/3</span>
+          </div>
+
+          <!-- Gentle Breath Instruction Hint under the Attempt Badge -->
+          <div id="instruction-hint" class="instruction-hint" role="status">
+            <span class="hint-text">Blow gently into mic or tap &amp; hold</span>
+          </div>
+        </div>
+
+        <!-- Interactive Breath / Microphone Button -->
+        <button id="breath-indicator" class="breath-indicator" type="button" aria-label="Hold to blow bubble or blow into microphone">
+          <div class="breath-ripple ripple-1"></div>
+          <div class="breath-ripple ripple-2"></div>
+          <img src="/assets/current/decorative/mic-button.png" alt="" class="breath-orb-img" aria-hidden="true" />
+        </button>
+      </aside>
+
+      <!-- 4. RESULT SCORE CARD MODAL -->
+      <div id="score-modal" class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-header">
+        <div class="modal-scrim" id="modal-scrim"></div>
+
+        <div class="modal-card-wrapper">
+          <div class="parchment-card" id="score-card">
+            <!-- Background Artwork Frame (705x1024 with floral border & bow ribbon, clean parchment) -->
+            <img src="/assets/current/screens/parchment-card-clean.png" alt="" class="parchment-card-bg" aria-hidden="true" />
+
+            <!-- Card HTML Dynamic Text Overlays -->
+            <div class="card-inner-content">
+              <div class="card-header-group">
+                <span id="modal-header" class="card-category-label">YOUR SCORE</span>
+                <span id="modal-score" class="card-score-number">78</span>
+              </div>
+
+              <blockquote id="modal-quote" class="card-quote">
+                “Beautiful bubble! You’re doing wonderfully.”
+              </blockquote>
+
+              <hr class="card-divider" />
+
+              <!-- 3. Vertically aligned text: SIZE, CONTROL, and OUTCOME one by one -->
+              <div class="card-stats-vertical">
+                <div class="stat-row">
+                  <span class="stat-label">SIZE</span>
+                  <span id="stat-size-val" class="stat-val">Large</span>
+                </div>
+                <div class="stat-row">
+                  <span class="stat-label">CONTROL</span>
+                  <span id="stat-control-val" class="stat-val">Great</span>
+                </div>
+                <div class="stat-row">
+                  <span class="stat-label">OUTCOME</span>
+                  <span id="stat-outcome-val" class="stat-val">Floated Away</span>
+                </div>
+              </div>
+
+              <!-- 4. Actions: Consistent length & width; PLAY AGAIN comes 1st, then SHARE -->
+              <div class="card-actions-cluster">
+                <button id="modal-cta-btn" class="cta-pill-btn" type="button" aria-label="Continue or Play Again">
+                  <span id="modal-cta-label" class="cta-btn-label">CONTINUE</span>
+                </button>
+
+                <button id="modal-share-btn" class="cta-share-pill-btn hidden" type="button" aria-label="Share your score">
+                  <span class="share-btn-label">SHARE</span>
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+</body>
+
+</html>
