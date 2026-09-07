@@ -62,7 +62,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     stateMachine,
     gameController,
     lottieController,
-    audioManager
+    audioManager,
+    inputAdapter,
+    micAdapter
   };
 
   // 6. Preload Lottie Animation (stays at frame 0 idle meadow for Entry screen)

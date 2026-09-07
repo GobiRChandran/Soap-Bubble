@@ -12,7 +12,7 @@ export class ScoreManager {
     }
 
     if (outcome === 'popped') {
-      controlRating = 'Overblown';
+      controlRating = size === 'large' ? 'Overblown' : (size === 'medium' ? 'Brisk Gust' : 'Sharp Puff');
       const score = Math.max(45, baseScore - 18 + Math.round(intensity * 4));
       return { score, bubbleSize: sizeLabel, controlRating, outcome: outcomeLabel };
     }

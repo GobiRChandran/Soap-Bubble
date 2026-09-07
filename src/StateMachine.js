@@ -48,7 +48,7 @@ export class StateMachine {
   }
 
   _bindInputEvents() {
-    this.input.onBlowStartHandler = () => this.handleBlowStart();
+    this.input.onBlowStartHandler = (initialIntensity) => this.handleBlowStart(initialIntensity);
     this.input.onBlowProgressHandler = (data) => this.handleBlowProgress(data);
     this.input.onBlowReleaseHandler = (data) => this.handleBlowRelease(data);
   }
@@ -82,12 +82,13 @@ export class StateMachine {
     this.input.enable();
   }
 
-  handleBlowStart() {
+  handleBlowStart(initialIntensity = 0.3) {
     if (this.state !== GameStates.READY) return;
 
     this.setState(GameStates.GROWING, { chance: this.currentChance });
     this.blowStartTime = performance.now();
     this._lastFrameTime = performance.now();
+    this.blowIntensity = typeof initialIntensity === 'number' ? initialIntensity : 0.3;
     this.growthProgress = 0;
     this.bubbleSize = 'small';
     this.onLiveSizeChange('Small');
@@ -105,14 +106,32 @@ export class StateMachine {
     const loop = (now) => {
       if (this.state !== GameStates.GROWING) return;
 
-      const dt = Math.min((now - this._lastFrameTime) / 1000, 0.1);
+      const dt = Math.min((now - this._lastFrameTime) / 1000, 0.05);
       this._lastFrameTime = now;
 
-      // Rate of expansion: ~2.8s for a full gentle breath to reach maximum large
-      const speedMultiplier = 0.85 + (this.blowIntensity * 0.35);
-      const growthRate = (1 / 2.7) * speedMultiplier;
+      // Realistic capacity ceiling dynamically governed by airflow strength:
+      // Gentle breath (~0.15 - 0.38): caps at Small (0.18 - 0.34)
+      // Steady breath (~0.39 - 0.72): caps at Medium (0.42 - 0.70)
+      // Strong breath (~0.73 - 0.88): caps at Large (0.75 - 1.00)
+      let targetCeiling = 0.32;
+      if (this.blowIntensity > 0.72) {
+        targetCeiling = 1.0;
+      } else if (this.blowIntensity > 0.38) {
+        const t = (this.blowIntensity - 0.38) / (0.72 - 0.38);
+        targetCeiling = 0.42 + t * 0.28;
+      } else {
+        const t = Math.max(0, (this.blowIntensity - 0.12) / (0.38 - 0.12));
+        targetCeiling = 0.18 + t * 0.14;
+      }
 
-      this.growthProgress = Math.min(this.growthProgress + dt * growthRate, 1.0);
+      // Expansion rate calibrated to natural human breathing rhythm
+      const breathForce = 0.72 + (this.blowIntensity * 0.42);
+      const headroom = targetCeiling - this.growthProgress;
+      if (headroom > 0.003) {
+        const ease = Math.max(0.24, Math.min(headroom / 0.22, 1.0));
+        this.growthProgress = Math.min(this.growthProgress + dt * breathForce * ease, targetCeiling);
+      }
+
       this.blowDuration = (now - this.blowStartTime) / 1000;
 
       // Update dynamic bubble growth sound
@@ -120,21 +139,21 @@ export class StateMachine {
         this.audioManager.setBubbleGrowth(this.growthProgress, this.blowIntensity);
       }
 
-      // Map progress smoothly: 0.0 -> 1.0 maps to frames 165 -> 199.5 (Layer 5: Continuous inflation)
-      // Strictly clamped below 200 to prevent touching frame 201 (burst crack particles)
-      const targetFrame = Math.min(165 + this.growthProgress * 34.5, 199.5);
+      // Subtle organic breathing wobble while holding wand
+      const wobble = Math.sin(now * 0.007) * 0.3;
+      const targetFrame = Math.min(165 + this.growthProgress * 34.5 + wobble, 199.5);
       this.lottie.goToAndStop(targetFrame);
 
-      // Real-time live size calculation:
-      // Small: 0 to 0.35 (frame 165 to 177, scale ~69 to ~104)
-      // Medium: 0.35 to 0.70 (frame 177 to 189, scale ~104 to ~135)
-      // Large: 0.70 to 1.0 (frame 189 to 200, scale ~135 to 160)
-      if (this.growthProgress < 0.35) {
+      // Real-time live size staging:
+      // Small: < 0.36
+      // Medium: 0.36 to 0.72
+      // Large: >= 0.72
+      if (this.growthProgress < 0.36) {
         if (this.bubbleSize !== 'small') {
           this.bubbleSize = 'small';
           this.onLiveSizeChange('Small');
         }
-      } else if (this.growthProgress < 0.70) {
+      } else if (this.growthProgress < 0.72) {
         if (this.bubbleSize !== 'medium') {
           this.bubbleSize = 'medium';
           this.onLiveSizeChange('Medium');
@@ -146,15 +165,18 @@ export class StateMachine {
         }
       }
 
-      // Overblow detection: if reached maximum and player continues blowing past grace period -> burst!
-      if (this.growthProgress >= 1.0) {
+      // Overblow detection: continuing to push air past max large pops the bubble!
+      if (this.growthProgress >= 0.96) {
         if (!this._overblowTimeout) {
           this._overblowTimeout = setTimeout(() => {
             if (this.state === GameStates.GROWING && this.input.isBlowing) {
               this.triggerBurst('large');
             }
-          }, 600);
+          }, 380);
         }
+      } else if (this._overblowTimeout) {
+        clearTimeout(this._overblowTimeout);
+        this._overblowTimeout = null;
       }
 
       this._growAnimFrame = requestAnimationFrame(loop);
@@ -176,6 +198,13 @@ export class StateMachine {
 
   handleBlowProgress({ duration, intensity }) {
     this.blowIntensity = intensity;
+
+    // Sudden violent gust rupture: real soap film bursts if blown too violently at any size
+    if (intensity >= 0.90 && this.growthProgress > 0.05 && this.state === GameStates.GROWING) {
+      this.triggerBurst(this.bubbleSize);
+      return;
+    }
+
     if (this.audioManager && this.state === GameStates.GROWING) {
       this.audioManager.setBubbleGrowth(this.growthProgress, intensity);
     }
@@ -193,47 +222,63 @@ export class StateMachine {
     }
 
     // Trigger float matching the exact size reached:
-    if (this.bubbleSize === 'large') {
+    if (this.bubbleSize === 'large' || this.growthProgress >= 0.72) {
       this.triggerFloat('large');
-    } else if (this.bubbleSize === 'medium') {
+    } else if (this.bubbleSize === 'medium' || this.growthProgress >= 0.36) {
       this.triggerFloat('medium');
     } else {
       this.triggerFloat('small');
     }
   }
 
-  triggerFloat(size) {
+  triggerFloat(size = null) {
     this._clearGrowthLoop();
     this.input.disable();
 
+    let floatSize = size || this.bubbleSize;
+    if (!floatSize || floatSize === 'none') {
+      if (this.growthProgress < 0.36) floatSize = 'small';
+      else if (this.growthProgress < 0.72) floatSize = 'medium';
+      else floatSize = 'large';
+    }
+    this.bubbleSize = floatSize;
+
     if (this.audioManager) {
       this.audioManager.stopBubbleGrowth();
-      this.audioManager.playBubbleFloat(size);
+      this.audioManager.playBubbleFloat(floatSize);
     }
 
-    this.setState(GameStates.FLOATING, { chance: this.currentChance });
+    this.setState(GameStates.FLOATING, { chance: this.currentChance, size: floatSize });
     this.outcome = 'floated';
 
-    const segmentName = size === 'large' ? 'FLOAT_LARGE' : (size === 'medium' ? 'FLOAT_MEDIUM' : 'FLOAT_SMALL');
+    const segmentName = floatSize === 'large' ? 'FLOAT_LARGE' : (floatSize === 'medium' ? 'FLOAT_MEDIUM' : 'FLOAT_SMALL');
 
     this.lottie.playSegment(segmentName, () => {
       this._onChanceComplete();
     });
   }
 
-  triggerBurst(size) {
+  triggerBurst(size = null) {
     this._clearGrowthLoop();
     this.input.disable();
 
+    let burstSize = size || this.bubbleSize;
+    if (!burstSize || burstSize === 'none') {
+      if (this.growthProgress < 0.36) burstSize = 'small';
+      else if (this.growthProgress < 0.72) burstSize = 'medium';
+      else burstSize = 'large';
+    }
+    this.bubbleSize = burstSize;
+
     if (this.audioManager) {
       this.audioManager.stopBubbleGrowth();
-      this.audioManager.playBubblePop(size);
+      this.audioManager.playBubblePop(burstSize);
     }
 
-    this.setState(GameStates.BURSTING, { chance: this.currentChance });
+    this.setState(GameStates.BURSTING, { chance: this.currentChance, size: burstSize });
     this.outcome = 'popped';
 
-    const segmentName = size === 'large' ? 'BURST_LARGE' : (size === 'medium' ? 'BURST_MEDIUM' : 'BURST_SMALL');
+    const segmentName = burstSize === 'large' ? 'BURST_LARGE' : (burstSize === 'medium' ? 'BURST_MEDIUM' : 'BURST_SMALL');
 
     this.lottie.playSegment(segmentName, () => {
       this._onChanceComplete();

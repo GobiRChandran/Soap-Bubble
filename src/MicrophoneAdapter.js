@@ -20,7 +20,8 @@ export class MicrophoneAdapter {
     // Thresholds for blow sound detection
     this.BLOW_THRESHOLD = 0.08;
     this.RELEASE_THRESHOLD = 0.04;
-    this.onAudioLevelCallback = null;
+    this.smoothedIntensity = 0;
+    this.filter = null;
   }
 
   isSupported() {
@@ -50,10 +51,19 @@ export class MicrophoneAdapter {
       }
 
       this.source = this.audioCtx.createMediaStreamSource(this.micStream);
+
+      // Breath turbulence filter: breath produces heavy acoustic energy below 400Hz
+      this.filter = this.audioCtx.createBiquadFilter();
+      this.filter.type = 'bandpass';
+      this.filter.frequency.setValueAtTime(180, this.audioCtx.currentTime);
+      this.filter.Q.setValueAtTime(0.8, this.audioCtx.currentTime);
+
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = 512;
-      this.analyser.smoothingTimeConstant = 0.3;
-      this.source.connect(this.analyser);
+      this.analyser.smoothingTimeConstant = 0.25;
+
+      this.source.connect(this.filter);
+      this.filter.connect(this.analyser);
 
       this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
       return true;
@@ -72,6 +82,7 @@ export class MicrophoneAdapter {
     this.onAudioLevelCallback = onAudioLevel || null;
     this.isListening = true;
     this.isBlowing = false;
+    this.smoothedIntensity = 0;
 
     const analyze = () => {
       if (!this.isListening) return;
@@ -86,11 +97,12 @@ export class MicrophoneAdapter {
       }
       const rms = Math.sqrt(sumSquares / this.dataArray.length);
 
-      // Normalize intensity (0 to 1)
-      const normalizedIntensity = Math.min(Math.max((rms - this.RELEASE_THRESHOLD) / (0.35 - this.RELEASE_THRESHOLD), 0), 1);
+      // Normalize raw intensity: gentle breath ~0.08, steady ~0.16, strong ~0.26+
+      const rawIntensity = Math.min(Math.max((rms - this.RELEASE_THRESHOLD) / (0.26 - this.RELEASE_THRESHOLD), 0), 1);
+      this.smoothedIntensity = this.smoothedIntensity * 0.65 + rawIntensity * 0.35;
 
       if (this.onAudioLevelCallback) {
-        this.onAudioLevelCallback(rms, normalizedIntensity);
+        this.onAudioLevelCallback(rms, this.smoothedIntensity);
       }
 
       if (rms > this.BLOW_THRESHOLD) {
@@ -100,11 +112,11 @@ export class MicrophoneAdapter {
         if (this.consecutiveBlowFrames >= 2 && !this.isBlowing) {
           this.isBlowing = true;
           this.blowStartTime = performance.now();
-          if (this.onBlowStartCallback) this.onBlowStartCallback();
+          if (this.onBlowStartCallback) this.onBlowStartCallback(this.smoothedIntensity);
         }
 
         if (this.isBlowing && this.onBlowIntensityCallback) {
-          this.onBlowIntensityCallback(normalizedIntensity);
+          this.onBlowIntensityCallback(this.smoothedIntensity);
         }
       } else if (rms < this.RELEASE_THRESHOLD) {
         this.consecutiveQuietFrames++;

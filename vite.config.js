@@ -7,7 +7,7 @@ export default defineConfig({
     watch: {
       usePolling: true,
       interval: 1000,
-      ignored: ['**/sounds/candidates/**', '**/node_modules/**', '**/.git/**']
+      ignored: ['**/sounds/candidates/**', '**/node_modules/**', '**/.git/**', '**/.temp_browser_profile*/**', '**/scratch/**', '**/screenshots/**']
     }
   }
 });

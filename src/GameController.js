@@ -405,9 +405,23 @@ export class GameController {
       const attempt = data.attempt || {};
       if (this.modalHeader) this.modalHeader.textContent = 'YOUR SCORE';
       if (this.modalScore) this.modalScore.textContent = attempt.score || 78;
-      if (this.modalQuote) this.modalQuote.textContent = '“Beautiful bubble! You’re doing wonderfully.”';
-      if (this.statSizeVal) this.statSizeVal.textContent = attempt.bubbleSize || 'Large';
-      if (this.statControlVal) this.statControlVal.textContent = attempt.controlRating || 'Great';
+      if (this.modalQuote) {
+        if (attempt.outcome === 'Popped') {
+          this.modalQuote.textContent = attempt.bubbleSize === 'Large'
+            ? '“So close! A giant bubble popped right at the peak.”'
+            : (attempt.bubbleSize === 'Medium'
+                ? '“Almost there! A gentler breath will send it soaring.”'
+                : '“Delicate soap film! Try a softer, calmer breath.”');
+        } else {
+          this.modalQuote.textContent = attempt.bubbleSize === 'Large'
+            ? '“Majestic! A giant sphere dancing into the blue sky.”'
+            : (attempt.bubbleSize === 'Medium'
+                ? '“Wonderful control! A balanced bubble carried by the breeze.”'
+                : '“Delicate and graceful! A gentle little bubble floated away.”');
+        }
+      }
+      if (this.statSizeVal) this.statSizeVal.textContent = attempt.bubbleSize || 'Medium';
+      if (this.statControlVal) this.statControlVal.textContent = attempt.controlRating || 'Gentle';
       if (this.statOutcomeVal) {
         this.statOutcomeVal.textContent = attempt.outcome || 'Floated Away';
       }
