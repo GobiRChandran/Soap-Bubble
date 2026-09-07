@@ -68,7 +68,7 @@ export class GameController {
         this.anim.animateTap(this.btnStartBlowing);
       });
       this.btnStartBlowing.addEventListener('click', () => {
-        this.startSession(false);
+        this.startSession(true);
       });
     }
 
@@ -80,6 +80,22 @@ export class GameController {
       this.btnUseMic.addEventListener('click', () => {
         this.startSession(true);
       });
+    }
+
+    // Re-prompt microphone access if user taps mic indicator while inactive
+    if (this.input) {
+      this.input.onRequestMicHandler = async () => {
+        if (!this.isMicActive) {
+          const granted = await this.mic.requestPermission();
+          if (granted) {
+            this.isMicActive = true;
+            this.input.attachMicrophone();
+            this._updateHintText('Blow gently into microphone');
+          } else {
+            this._updateHintText('Microphone access needed • Tap mic below');
+          }
+        }
+      };
     }
 
     // 3. Score Modal CTA: CONTINUE or PLAY AGAIN
@@ -109,43 +125,205 @@ export class GameController {
       });
     }
 
-    // 4. Score Modal Share CTA with subtle tap feedback
+    // 4. Score Modal Share CTA with image generation & link
     if (this.modalShareBtn) {
       this.modalShareBtn.addEventListener('pointerdown', () => {
         this.anim.animateTap(this.modalShareBtn);
       });
       this.modalShareBtn.addEventListener('click', async () => {
         const score = this.modalScore ? this.modalScore.textContent : '78';
-        const shareData = {
-          title: 'Soap Bubble Whisper',
-          text: `I just scored ${score} in Soap Bubble! Three beautiful bubbles floating into the sky.`,
-          url: window.location.href
-        };
+        const labelEl = this.modalShareBtn.querySelector('.share-btn-label') || this.modalShareBtn.querySelector('.card-share-label');
+        const prevText = labelEl ? labelEl.textContent : 'SHARE';
 
-        if (navigator.share) {
-          try {
-            await navigator.share(shareData);
-          } catch (e) {
-            // User cancelled share
-          }
-        } else if (navigator.clipboard) {
-          try {
-            await navigator.clipboard.writeText(`${shareData.text} ${shareData.url}`);
-            const originalLabel = this.modalShareBtn.querySelector('.card-share-label');
-            if (originalLabel) {
-              const prevText = originalLabel.textContent;
-              originalLabel.textContent = 'COPIED!';
-              setTimeout(() => {
-                originalLabel.textContent = prevText;
-              }, 1800);
+        if (labelEl) labelEl.textContent = 'SHARING...';
+
+        const shareUrl = window.location.href;
+        const shareText = `I just scored ${score} in Soap Bubble! 🫧 Three beautiful bubbles floating into the sky.\nPlay here: ${shareUrl}`;
+
+        try {
+          // Generate score card image Blob via Canvas
+          const imageBlob = await this.generateShareCardBlob();
+          const fileName = `soap-bubble-score-${score}.png`;
+          const imageFile = imageBlob ? new File([imageBlob], fileName, { type: 'image/png' }) : null;
+
+          // Check if navigator.share can share files
+          if (imageFile && navigator.canShare && navigator.canShare({ files: [imageFile] })) {
+            await navigator.share({
+              title: 'Soap Bubble Score',
+              text: shareText,
+              url: shareUrl,
+              files: [imageFile]
+            });
+            if (labelEl) {
+              labelEl.textContent = 'SHARED!';
+              setTimeout(() => { labelEl.textContent = prevText; }, 2000);
             }
-          } catch (err) {}
+            return;
+          }
+
+          // Native share without file fallback
+          if (navigator.share) {
+            await navigator.share({
+              title: 'Soap Bubble Score',
+              text: shareText,
+              url: shareUrl
+            });
+            if (labelEl) {
+              labelEl.textContent = 'SHARED!';
+              setTimeout(() => { labelEl.textContent = prevText; }, 2000);
+            }
+            return;
+          }
+
+          // Desktop / Clipboard fallback: download image & copy link
+          if (imageBlob) {
+            const downloadUrl = URL.createObjectURL(imageBlob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
+          }
+
+          if (navigator.clipboard) {
+            await navigator.clipboard.writeText(shareText);
+          }
+
+          if (labelEl) {
+            labelEl.textContent = 'SAVED & COPIED!';
+            setTimeout(() => { labelEl.textContent = prevText; }, 2500);
+          }
+        } catch (err) {
+          // Fallback to clipboard on cancel or error
+          if (navigator.clipboard) {
+            try { await navigator.clipboard.writeText(shareText); } catch (_) {}
+          }
+          if (labelEl) {
+            labelEl.textContent = 'LINK COPIED!';
+            setTimeout(() => { labelEl.textContent = prevText; }, 2000);
+          }
         }
       });
     }
   }
 
-  async startSession(requestMic = false) {
+  /**
+   * Generates a high-resolution PNG Blob of the final score card for sharing.
+   */
+  async generateShareCardBlob() {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 705;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+
+      // 1. Draw parchment background frame
+      const bgImg = new Image();
+      bgImg.crossOrigin = 'anonymous';
+      await new Promise((resolve, reject) => {
+        bgImg.onload = resolve;
+        bgImg.onerror = reject;
+        bgImg.src = '/assets/current/screens/parchment-card-clean.png';
+      });
+      ctx.drawImage(bgImg, 0, 0, 705, 1024);
+
+      // 2. Extract current score card data
+      const header = (this.modalHeader?.textContent || 'WELL BLOWN!').toUpperCase();
+      const score = this.modalScore?.textContent || '95';
+      const quote = (this.modalQuote?.textContent || 'Beautiful bubble!').replace(/[“”"]/g, '');
+      const size = document.getElementById('stat-size-val')?.textContent || 'Large';
+      const control = document.getElementById('stat-control-val')?.textContent || 'Balanced';
+      const outcome = document.getElementById('stat-outcome-val')?.textContent || 'Floated Away';
+
+      // 3. Render Header
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#342013';
+      ctx.font = '700 24px Fraunces, Georgia, serif';
+      ctx.fillText(header, 352, 295);
+
+      // 4. Render Score
+      ctx.fillStyle = '#c83838';
+      ctx.font = '800 88px Fraunces, Georgia, serif';
+      ctx.fillText(score, 352, 385);
+
+      // 5. Render Quote with wrapping
+      ctx.fillStyle = '#342013';
+      ctx.font = 'italic 500 20px "Nunito Sans", Georgia, serif';
+      const words = quote.split(' ');
+      let line = '“';
+      let y = 432;
+      for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > 460 && n > 0) {
+          ctx.fillText(line.trim(), 352, y);
+          line = words[n] + ' ';
+          y += 28;
+        } else {
+          line = testLine;
+        }
+      }
+      ctx.fillText(line.trim() + '”', 352, y);
+
+      // 6. Render Divider
+      y += 26;
+      ctx.strokeStyle = 'rgba(140, 114, 92, 0.35)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(140, y);
+      ctx.lineTo(565, y);
+      ctx.stroke();
+
+      // 7. Render Stats
+      const stats = [
+        { label: 'SIZE', val: size },
+        { label: 'CONTROL', val: control },
+        { label: 'OUTCOME', val: outcome }
+      ];
+      let statY = y + 42;
+      for (const s of stats) {
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#7c624d';
+        ctx.font = '700 18px "Nunito Sans", sans-serif';
+        ctx.fillText(s.label, 140, statY);
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#2e1d11';
+        ctx.font = '700 20px "Nunito Sans", sans-serif';
+        ctx.fillText(s.val, 565, statY);
+
+        statY += 38;
+      }
+
+      // 8. Render Footer Branding with Link
+      const host = window.location.host || 'soap-bubble.app';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#5c422f';
+      ctx.font = '700 16px "Nunito Sans", sans-serif';
+      ctx.fillText('Soap Bubble • Play & Blow Your Own Bubbles', 352, 875);
+
+      ctx.fillStyle = '#2a6875';
+      ctx.font = '600 15px "Nunito Sans", sans-serif';
+      ctx.fillText(host, 352, 902);
+
+      return await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    } catch (e) {
+      console.warn('Could not generate share card image:', e);
+      return null;
+    }
+  }
+
+  _updateHintText(msg) {
+    if (this.instructionHint) {
+      const hintSpan = this.instructionHint.querySelector('.hint-text');
+      if (hintSpan) hintSpan.textContent = msg;
+    }
+  }
+
+  async startSession(requestMic = true) {
     // 1. Animate Entry Screen exit via Motion
     if (this.entryScreen) {
       this.anim.animateEntryExit(this.entryScreen);
@@ -170,21 +348,22 @@ export class GameController {
       }
     }
 
-    // 4. Request Mic in background without blocking interaction
-    if (requestMic || !this.isMicActive) {
-      try {
-        const granted = await this.mic.requestPermission();
-        if (granted) {
-          this.isMicActive = true;
-          this.input.attachMicrophone();
-        } else {
-          this.isMicActive = false;
-          this.input.detachMicrophone();
-        }
-      } catch (e) {
+    // 4. Request Mic access (exclusive blow mechanism)
+    try {
+      const granted = await this.mic.requestPermission();
+      if (granted) {
+        this.isMicActive = true;
+        this.input.attachMicrophone();
+        this._updateHintText('Blow gently into microphone');
+      } else {
         this.isMicActive = false;
         this.input.detachMicrophone();
+        this._updateHintText('Microphone access needed • Tap mic below');
       }
+    } catch (e) {
+      this.isMicActive = false;
+      this.input.detachMicrophone();
+      this._updateHintText('Microphone access needed • Tap mic below');
     }
   }
 
@@ -205,6 +384,7 @@ export class GameController {
       }
       if (this.instructionHint) {
         this.instructionHint.style.opacity = '1';
+        this._updateHintText(this.isMicActive ? 'Blow gently into microphone' : 'Microphone access needed • Tap mic below');
       }
       if (this.breathIndicator) {
         this.breathIndicator.classList.remove('active');

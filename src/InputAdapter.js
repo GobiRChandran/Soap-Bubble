@@ -17,75 +17,21 @@ export class InputAdapter {
 
     this._progressInterval = null;
 
+    this.onRequestMicHandler = null;
+
     this._bindButtonEvents();
-    this._bindStageFallback();
   }
 
   _bindButtonEvents() {
     if (!this.blowButton) return;
 
-    const handleStart = (e) => {
+    // Tapping the microphone indicator requests/re-prompts microphone access if inactive
+    this.blowButton.addEventListener('click', (e) => {
       e.preventDefault();
-      if (!this.enabled || this.isBlowing) return;
-      this.activeSource = 'touch';
-      this.triggerBlowStart(0.7);
-    };
-
-    const handleEnd = (e) => {
-      e.preventDefault();
-      if (this.activeSource === 'touch' && this.isBlowing) {
-        this.triggerBlowRelease();
-      }
-    };
-
-    // Pointer / Touch events
-    this.blowButton.addEventListener('pointerdown', (e) => {
-      handleStart(e);
-    });
-    window.addEventListener('pointerup', (e) => {
-      if (this.activeSource === 'touch' && this.isBlowing) handleEnd(e);
-    });
-    window.addEventListener('pointercancel', (e) => {
-      if (this.activeSource === 'touch' && this.isBlowing) handleEnd(e);
-    });
-
-    // Keyboard support (Space or Enter)
-    this.blowButton.addEventListener('keydown', (e) => {
-      if ((e.code === 'Space' || e.code === 'Enter') && !e.repeat) {
-        handleStart(e);
+      if (this.onRequestMicHandler) {
+        this.onRequestMicHandler();
       }
     });
-    this.blowButton.addEventListener('keyup', (e) => {
-      if (e.code === 'Space' || e.code === 'Enter') {
-        handleEnd(e);
-      }
-    });
-  }
-
-  _bindStageFallback() {
-    if (!this.stageElement) return;
-
-    const handleStart = (e) => {
-      // Only use screen tap if microphone is NOT actively blowing and user interacts
-      if (!this.enabled || this.isBlowing) return;
-      // Do not intercept clicks on buttons or interactive overlays
-      if (e.target && (e.target.closest('button') || e.target.closest('.card-container'))) return;
-
-      this.activeSource = 'touch';
-      this.triggerBlowStart(0.65);
-    };
-
-    const handleEnd = (e) => {
-      if (this.activeSource === 'touch' && this.isBlowing) {
-        this.triggerBlowRelease();
-      }
-    };
-
-    this.stageElement.addEventListener('pointerdown', handleStart);
-    window.addEventListener('pointerup', handleEnd);
-    window.addEventListener('pointercancel', handleEnd);
-    window.addEventListener('touchend', handleEnd);
-    window.addEventListener('touchcancel', handleEnd);
   }
 
   attachMicrophone() {
